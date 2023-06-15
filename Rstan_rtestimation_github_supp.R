@@ -115,7 +115,7 @@ w<-c(0.000,0.036, 0.167, 0.208, 0.180, 0.135, 0.096, 0.066, 0.045, 0.031, 0.021,
 tau<- 7 
 Est_rt_stan<-list(T=T, S=S, I=I, w=w, tau=tau)
 
-model<-cmdstan_model('temp_data/rt_est_7.stan')
+model<-cmdstan_model('temp_data/rt_est_7_ex.stan')
 
 fit<-model$sample(
   data = Est_rt_stan,
