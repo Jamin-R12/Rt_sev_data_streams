@@ -99,54 +99,37 @@ AggCases %>%
 
 
 #----------------------------------------------------------------------#
-#3) RT estimation via cmdstan ####
-dv_case<-AggCases %>%
-  mutate(mean_rt = NA)%>%
-  arrange(date_int) %>%
-  mutate(day = row_number())
+#3) RT estimation via EpiEstim ####
+dv_case<-AggCases 
 
-#Set variables for CMDStan model
-dv_case$newI_case<-round(as.numeric(dv_case$newI_case))
+  dv_case<-dv_case %>% 
+    filter(date_int>=START_DATE)
   
-T<-nrow(dv_case) #T, number of event time
-S<-12 #S, Serial interval 
-I<-dv_case$newI_case %>%as.vector()    
-w<-c(0.000,0.036, 0.167, 0.208, 0.180, 0.135, 0.096, 0.066, 0.045, 0.031, 0.021, 0.015) 
-tau<- 7 
-Est_rt_stan<-list(T=T, S=S, I=I, w=w, tau=tau)
-
-model<-cmdstan_model('temp_data/rt_est_7_ex.stan')
-
-fit<-model$sample(
-  data = Est_rt_stan,
-  seed = 123456,
-  chains = 4,
-  parallel_chains = 4,
-  refresh = 500)
+  T_row <- nrow(dv_case)
+  t_start <- seq(2, T_row-6)
+  t_end <- t_start + 6 
+  res_para_temp <- estimate_R(incid = dv_case$newI, 
+                              method="non_parametric_si",
+                              config = make_config(list(
+                                t_start = t_start,
+                                t_end = t_end,
+                                si_distr = c(0.000,0.036, 0.167, 0.208, 0.180, 0.135, 0.096, 0.066, 0.045, 0.031, 0.021, 0.015))
+                              ))
   
-stanfit <-read_stan_csv(fit$output_files())
 
-rt_summary <- summary(stanfit)$summary %>% 
-  as.data.frame() %>% 
-  mutate(variable = rownames(.)) %>% 
-  select(variable, everything())
   
-#change data. 
-rt_case<-rt_summary %>% 
-  mutate(
-    mean_rt = mean,
-    lower = rt_summary$`2.5%`,
-    upper = rt_summary$`97.5%`,
-    day = row_number())%>%
-  select(day, mean_rt, lower, upper, sd, se_mean, n_eff)%>%
-  filter(!abs(mean_rt)>(100*mean(mean_rt)))
+  rt_case = list(Estim = res_para_temp,
+               df = as.data.frame(cbind(date = dv_case[t_end,'date_int'],
+                                        res_para_temp$R,
+                                        indi = 'case',
+                                        wave = WAVE))
+  )
 
-
+res_L
 #plot
-plot(rt_case$day, rt_case$mean_rt, type = "l", xlab = "Day", ylab = "Rt")
-lines(rt_case$day, rt_case$upper, type = "l", lwd = 2, col = "grey")
-lines(rt_case$day, rt_case$lower, type = "l", lwd = 2, col = "grey")
-lines(rt_case$day, rt_case$mean_rt, type = "l", lwd = 2)
+plot(rt_case$df$date_int,rt_case$df$`Mean(R)`, type = "l", xlab = "Day", ylab = "Rt")
+lines(rt_case$df$date_int, icu_L_6$df$`Quantile.0.025(R)`, type = "l", lwd = 2, col = "grey")
+lines(rt_case$df$date_int, icu_L_6$df$`Quantile.0.975(R)`, type = "l", lwd = 2, col = "grey")
 legend("topright", legend = c("Instantaneous Rt", "Credible interval"), 
        lty = c(1, 1), lwd = c(2, 2), col = c("black", "grey"))
 
